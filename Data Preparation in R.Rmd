@@ -1,0 +1,486 @@
+---
+title: "CS5812 Predictive Data Analysis Group work"
+author: "Ukamaka Nkechi Oragwu"
+date: "2023-02-07"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# 1. Load and use Packages 
+# 2. Load Data and View Data 
+# 3. Data Preparation- Quality check and Cleaning 
+# 4. Data Transoformation, Feature extraction/selection
+# 5. Data Exploration- Statistical, Graphical, Principal Component Analysis
+
+#1. Load and use Packages 
+Loading necessary libraries
+```{r}
+library(ggplot2)
+library(validate)
+```
+
+# 2. Load and View Data
+```{r}
+hotel_reservation <- read.csv("hotel reservation randomised.csv")
+
+#making hotel_reservation data a data frame
+hotel_reservation <- data.frame(hotel_reservation)
+
+#Viewing the data
+head(hotel_reservation)
+summary(hotel_reservation)
+str(hotel_reservation)
+```
+The variables of our data set were read in correctly except for the following:
+- type_of_meal_plan
+- room_type_reserved
+- market_segment_type 
+- booking_status
+They were read in as characters instead of factors, however, these variables will be recoded to integers during data transformation so we will leave them as characters for now. 
+
+# 3. Quality Check and Cleaning
+a. Detecting missing values
+b. Detecting Duplicates
+c. Data Validation
+d. Data Cleaning
+  - Dealing with missing values
+  - Dealing with duplicates
+  - (Simple) outlier detection
+
+```{r}
+#a. Detecting missing values 
+colSums(is.na(hotel_reservation)) 
+
+#b. Detecting duplicate values
+dim(hotel_reservation) 
+dim(unique(hotel_reservation))
+sum(duplicated(hotel_reservation))
+```
+Missing Values:
+We recorded 1 missing value in avg_price_per_room variable. 
+Duplicate Instances: 
+There are no duplicates in our dataset.
+
+```{r}
+#c. Validation Process
+
+Mydf.Rules <- validator(
+  nonNegchildren = no_of_children >=0,
+  nonNegweekend = no_of_weekend_nights>=0,
+  nonNegweek = no_of_week_nights>=0,
+  nonNegLeadtime = lead_time>=0,
+  nonNegprevCan = no_of_previous_cancellations>=0,
+  nonNegnotCan = no_of_previous_bookings_not_canceled>=0,
+  nonNegPrice = avg_price_per_room>=0,
+  nonNegspecial = no_of_special_requests>=0,
+  okMealplan= is.element(type_of_meal_plan,c("Not Selected","Meal Plan 1","Meal Plan 2", "Meal Plan 3")),
+  okparking= is.element(required_car_parking_space,c("0","1")),
+  okroomtype= is.element(room_type_reserved,c("Room_Type 1","Room_Type 2", "Room_Type 3", "Room_Type 4", "Room_Type 5","Room_Type 6", "Room_Type 7")),
+  okYear = arrival_year >= 2017 & arrival_year <=2018,
+  okMonth = arrival_month> 0 & arrival_month <=12,
+  NonNegdate = arrival_date>0,
+  Limitdate = arrival_date<=31,
+  okguest= is.element(repeated_guest,c("0","1")),
+  okMarket = is.element(market_segment_type, c("Aviation", "Complementary", "Corporate", "Offline", "Online")),
+  okBooking = is.element(booking_status, c("Canceled","Not_Canceled")))
+
+qual.check <- confront(hotel_reservation,Mydf.Rules)
+summary(qual.check)
+plot(qual.check, xlab="")
+```
+Here we see that there are 2 rules that failed our validation test and these are in the room_type_reserved and meal_plan_type variables. And 1 missing value in the avg_room_price variable. 
+
+```{r}
+#investigating the failure in room_type_reserved and meal_plan_type
+table(hotel_reservation$type_of_meal_plan)
+table(hotel_reservation$room_type_reserved)
+```
+We can see that there was a wrong spelling for Meal Plan 1 as MealPlan 1, and Room_Type 1 was misspelt as RoomType1.
+
+```{r}
+# d. Data Cleaning
+
+# Fixing the wrong spelling
+hotel_reservation$room_type_reserved[hotel_reservation$room_type_reserved == "RoomType 1"] <- "Room_Type 1"
+table(hotel_reservation$room_type_reserved)
+
+hotel_reservation$type_of_meal_plan[hotel_reservation$type_of_meal_plan == "MealPlan 1"] <- "Meal Plan 1"
+table(hotel_reservation$type_of_meal_plan)
+
+# Fixing the missing value 
+hotel_reservation$avg_price_per_room <- as.numeric(hotel_reservation$avg_price_per_room)
+hotel_reservation$avg_price_per_room[hotel_reservation$avg_price_per_room == " "] <- NA #Recoding missing value
+
+hotel_reserve_noNA <- hotel_reservation #Creating new data frame before imputing
+hotel_reserve_noNA$avg_price_per_room[is.na(hotel_reserve_noNA$avg_price_per_room)] <- median(hotel_reserve_noNA$avg_price_per_room, na.rm = T)
+summary(hotel_reserve_noNA$avg_price_per_room)
+```
+Our variables are correctly represented now
+
+```{r}
+# (Simple) Outlier Detection for the target variable 
+
+# inspect the Fare distribution using summary statistics 
+summary(hotel_reserve_noNA$avg_price_per_room)
+
+# generate a boxplot of the avg_price_per_room variable 
+#png(file = "hotelreserve boxplot_price.png")
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(1,2))
+boxplot(hotel_reserve_noNA$avg_price_per_room, outline=FALSE)
+boxplot(avg_price_per_room ~ room_type_reserved, data = hotel_reserve_noNA)
+par(opar)
+#dev.off()
+
+```
+We do not see any outliers in the average room price alone but when compared with other variables we see that one price instance is significantly different from the rest and may be skewing the data. We will take a closer look at this outlier in the EDA before deciding if to take it out.
+
+#3.Feature Selection/extraction
+The booking_ID column does not add significant information to our dataset so we will be dropping this column
+```{r}
+#dropping booking_ID column
+hotel_reserve_noNA <- hotel_reserve_noNA[,-1]
+head(hotel_reserve_noNA)
+```
+
+
+#4. Exploratory Data Analysis
+a. Statistical Exploration
+```{r}
+summary(hotel_reserve_noNA) #summary of our cleaned data
+str(hotel_reserve_noNA)
+head(hotel_reserve_noNA)
+```
+
+
+```{r}
+# creating label vectors for numerical and categorical variables
+hotel_reservation_num <- c("no_of_adults", "no_of_children", "no_of_weekend_nights", "no_of_week_nights","lead_time", "no_of_previous_cancellations", "no_of_previous_bookings_not_canceled", "avg_price_per_room", "no_of_special_requests")
+
+hotel_reservation_cat <- c("type_of_meal_plan", "required_car_parking_space", "room_type_reserved",  "market_segment_type","repeated_guest", "booking_status","arrival_date","arrival_year","arrival_month")
+```
+
+Visualizing Numerical Data 
+```{r}
+# exploring relationships among features: correlation matrix
+hotel_reservation_num_cor <- cor(hotel_reserve_noNA[hotel_reservation_num])
+
+# visualize the correlation matrix
+hotel_reservation_num_cor
+```
+
+```{r}
+# plot the relationships among features - scatterplot matrix
+pairs(hotel_reserve_noNA[hotel_reservation_num])
+```
+
+```{r}
+# plot a more informative scatterplot matrix
+#png(file = "hotelreserve pairs plot.png")
+psych::pairs.panels(hotel_reserve_noNA[hotel_reservation_num])
+#dev.off()
+```
+
+There are no significant correlations between the numerical variables
+```{r}
+head(hotel_reserve_noNA)
+summary(hotel_reserve_noNA)
+```
+
+Independent graphical views of the numeric variables:
+```{r}
+#png(file = "hotelreserve histogram plots.png")
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(3,3)) #since we have 9 plots to show we use a 3x3 matrix 
+hist(hotel_reserve_noNA[, 1], main = names(hotel_reserve_noNA)[1], xlab = names(hotel_reserve_noNA)[1], xlim = c(0,5)) 
+hist(hotel_reserve_noNA[, 2], main = names(hotel_reserve_noNA)[2], xlab = names(hotel_reserve_noNA)[2], xlim = c(0,10)) 
+hist(hotel_reserve_noNA[, 3], main = names(hotel_reserve_noNA)[3], xlab = names(hotel_reserve_noNA)[3], xlim = c(0,10)) 
+hist(hotel_reserve_noNA[, 4], main = names(hotel_reserve_noNA)[4], xlab = names(hotel_reserve_noNA)[4], xlim = c(0,20)) 
+hist(hotel_reserve_noNA[, 8], main = names(hotel_reserve_noNA)[8], xlab = names(hotel_reserve_noNA)[8], xlim = c(0,500)) 
+hist(hotel_reserve_noNA[, 14], main = names(hotel_reserve_noNA)[14], xlab = names(hotel_reserve_noNA)[14], xlim = c(0,15)) 
+hist(hotel_reserve_noNA[, 15], main = names(hotel_reserve_noNA)[15], xlab = names(hotel_reserve_noNA)[15], xlim = c(0,60)) 
+hist(hotel_reserve_noNA[, 16], main = names(hotel_reserve_noNA)[16], xlab = names(hotel_reserve_noNA)[16], xlim = c(0,5)) 
+hist(hotel_reserve_noNA[, 18], main = names(hotel_reserve_noNA)[18], xlab = names(hotel_reserve_noNA)[18], xlim = c(0,600)) 
+par(opar)
+#dev.off()
+```
+For the average price per room, our histogram looks skewed to the right. This will be investigated further when the price is compared to other variables.
+
+Categorical Data
+```{r}
+#  frequency tables for each categorical variable
+hotel_reservation_cat_table <- apply(hotel_reserve_noNA[,c("type_of_meal_plan", "required_car_parking_space", "room_type_reserved", "arrival_year","arrival_date","arrival_month", "market_segment_type", "repeated_guest", "booking_status")], 2, table)
+
+# visualize the table
+hotel_reservation_cat_table 
+```
+
+
+Bar plots for to analyze categorical variables individually
+```{r}
+#png(file = "hotelreserve bar plots.png")
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(3,3)) #since we have 7 plots to show we use a 3x3 matrix 
+barplot(table(hotel_reserve_noNA[, 5]), main = names(hotel_reserve_noNA)[5], xlab = names(hotel_reserve_noNA)[5]) 
+barplot(table(hotel_reserve_noNA[, 6]), main = names(hotel_reserve_noNA)[6], xlab = names(hotel_reserve_noNA)[6]) 
+barplot(table(hotel_reserve_noNA[, 7]), main = names(hotel_reserve_noNA)[7], xlab = names(hotel_reserve_noNA)[7]) 
+barplot(table(hotel_reserve_noNA[, 9]), main = names(hotel_reserve_noNA)[9], xlab = names(hotel_reserve_noNA)[9]) 
+barplot(table(hotel_reserve_noNA[, 10]), main = names(hotel_reserve_noNA)[10], xlab = names(hotel_reserve_noNA)[10])
+barplot(table(hotel_reserve_noNA[, 11]), main = names(hotel_reserve_noNA)[11], xlab = names(hotel_reserve_noNA)[11])
+barplot(table(hotel_reserve_noNA[, 12]), main = names(hotel_reserve_noNA)[12], xlab = names(hotel_reserve_noNA)[12]) 
+barplot(table(hotel_reserve_noNA[, 13]), main = names(hotel_reserve_noNA)[13], xlab = names(hotel_reserve_noNA)[13]) 
+barplot(table(hotel_reserve_noNA[, 17]), main = names(hotel_reserve_noNA)[18], xlab = names(hotel_reserve_noNA)[17]) 
+par(opar)
+#dev.off()
+```
+
+Comparing relationships between the average room price and other variables
+```{r}
+# plot avg_price_per_room distribution by group of categorical variables - boxplot
+#png(file = "hotelreserve box plots price.png")
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(2,3))
+boxplot(avg_price_per_room ~ room_type_reserved, data = hotel_reserve_noNA)
+boxplot(avg_price_per_room ~ arrival_year, data = hotel_reserve_noNA)
+boxplot(avg_price_per_room ~ market_segment_type, data = hotel_reserve_noNA)
+boxplot(avg_price_per_room ~ required_car_parking_space, data = hotel_reserve_noNA)
+boxplot(avg_price_per_room ~ repeated_guest, data = hotel_reserve_noNA)
+boxplot(avg_price_per_room ~ booking_status, data = hotel_reserve_noNA)
+par(opar)
+#dev.off()
+```
+From here we can see consistently that there are outliers. However the outlier that looks most plausible is the price above 500 which is significantly distant from the rest of the points. We will take this point out but we do not have sufficient reason to remove the other outliers as they are most likely part of our data. 
+
+```{r}
+#Removing the outlier (instance in average price greater than 500)
+# outliers rows can be extracted by conditional selection
+hotel_reserve_noOut <- hotel_reserve_noNA[hotel_reserve_noNA$avg_price_per_room <= 500, ]
+boxplot(avg_price_per_room ~ room_type_reserved, data = hotel_reserve_noOut)
+
+#visualizing the average price per room
+summary(hotel_reserve_noOut$avg_price_per_room)
+hist(hotel_reserve_noOut[, 18], main = names(hotel_reserve_noOut)[18], xlab = names(hotel_reserve_noOut)[18], xlim = c(0,400)) 
+```
+The average price per room is still a little skewed to the right but atleast better than before the outlier was removed. 
+```{r}
+#comparing the relationship of price with other variables without the outlier
+#png(file = "hotelreserve no Out box plots price.png")
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(2,3))
+boxplot(avg_price_per_room ~ room_type_reserved, data = hotel_reserve_noOut)
+boxplot(avg_price_per_room ~ arrival_year, data = hotel_reserve_noOut)
+boxplot(avg_price_per_room ~ market_segment_type, data = hotel_reserve_noOut)
+boxplot(avg_price_per_room ~ required_car_parking_space, data = hotel_reserve_noOut)
+boxplot(avg_price_per_room ~ repeated_guest, data = hotel_reserve_noOut)
+boxplot(avg_price_per_room ~ booking_status, data = hotel_reserve_noOut)
+par(opar)
+#dev.off()
+```
+Our data looks good to proceed with.
+
+Mosaic Plots - Categorical Variables against each other
+```{r}
+#png(file = "hotelreserve_noOut mosaic plots .png")
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(2,3))
+counts <- table(hotel_reserve_noOut$booking_status, hotel_reserve_noOut$room_type_reserved)
+mosaicplot(counts, xlab='Booking Status', ylab='Room Type',main='Booking Status based on Room Type', col='orange')
+
+counts <- table(hotel_reserve_noOut$booking_status, hotel_reserve_noOut$arrival_year)
+mosaicplot(counts, xlab='Booking Status', ylab='Arrival Year',main='Booking Status based on Arrival Year', col='orange')
+
+counts <- table(hotel_reserve_noOut$booking_status, hotel_reserve_noOut$arrival_month)
+mosaicplot(counts, xlab='Booking Status', ylab='Arrival Month',main='Booking Status based on Arrival Month', col='orange')
+
+counts <- table(hotel_reserve_noOut$booking_status, hotel_reserve_noOut$market_segment_type)
+mosaicplot(counts, xlab='Booking Status', ylab='Market Segment Type',main='Booking Status based on Market Segment Type', col='orange')
+
+counts <- table(hotel_reserve_noOut$booking_status, hotel_reserve_noOut$repeated_guest)
+mosaicplot(counts, xlab='Booking Status', ylab='Repeated Guest',main='Booking Status based on whether Repeated Guest', col='orange')
+par(opar)
+#dev.off()
+```
+
+
+# Data Transformation
+We will now be re-coding the variables below to enable easy manipulation of our data in the following sections (PCA and Modelling)
+- type_of_meal_plan
+- room_type_reserved
+- market_segment_type 
+- booking_status
+```{r}
+hotel_reserve_noOut$type_of_meal_plan[hotel_reserve_noOut$type_of_meal_plan == "Not Selected"] <- 0
+hotel_reserve_noOut$type_of_meal_plan[hotel_reserve_noOut$type_of_meal_plan == "Meal Plan 1"] <- 1
+hotel_reserve_noOut$type_of_meal_plan[hotel_reserve_noOut$type_of_meal_plan == "Meal Plan 2"] <- 2
+hotel_reserve_noOut$type_of_meal_plan[hotel_reserve_noOut$type_of_meal_plan == "Meal Plan 3"] <- 3
+
+hotel_reserve_noOut$room_type_reserved[hotel_reserve_noOut$room_type_reserved == "Room_Type 1"] <- 1
+hotel_reserve_noOut$room_type_reserved[hotel_reserve_noOut$room_type_reserved == "Room_Type 2"] <- 2
+hotel_reserve_noOut$room_type_reserved[hotel_reserve_noOut$room_type_reserved == "Room_Type 3"] <- 3
+hotel_reserve_noOut$room_type_reserved[hotel_reserve_noOut$room_type_reserved == "Room_Type 4"] <- 4
+hotel_reserve_noOut$room_type_reserved[hotel_reserve_noOut$room_type_reserved == "Room_Type 5"] <- 5
+hotel_reserve_noOut$room_type_reserved[hotel_reserve_noOut$room_type_reserved == "Room_Type 6"] <- 6
+hotel_reserve_noOut$room_type_reserved[hotel_reserve_noOut$room_type_reserved == "Room_Type 7"] <- 7
+
+hotel_reserve_noOut$market_segment_type[hotel_reserve_noOut$market_segment_type == "Aviation"] <- 1
+hotel_reserve_noOut$market_segment_type[hotel_reserve_noOut$market_segment_type == "Complementary"] <- 2
+hotel_reserve_noOut$market_segment_type[hotel_reserve_noOut$market_segment_type == "Corporate"] <- 3
+hotel_reserve_noOut$market_segment_type[hotel_reserve_noOut$market_segment_type == "Offline"] <- 4
+hotel_reserve_noOut$market_segment_type[hotel_reserve_noOut$market_segment_type == "Online"] <- 5
+
+hotel_reserve_noOut$booking_status[hotel_reserve_noOut$booking_status == "Canceled"] <- 1
+hotel_reserve_noOut$booking_status[hotel_reserve_noOut$booking_status == "Not_Canceled"] <- 2
+```
+
+Visualize the encoded data
+```{r}
+summary(hotel_reserve_noOut) #summary of our cleaned data
+str(hotel_reserve_noOut)
+head(hotel_reserve_noOut)
+```
+The factors below have been successfully encoded but they are still being read as character so we will convert them to numerical:
+- type_of_meal_plan
+- room_type_reserved
+- market_segment_type 
+- booking_status
+```{r}
+hotel_reserve_noOut$type_of_meal_plan <- as.numeric(hotel_reserve_noOut$type_of_meal_plan)
+hotel_reserve_noOut$room_type_reserved <- as.numeric(hotel_reserve_noOut$room_type_reserved)
+hotel_reserve_noOut$market_segment_type <- as.numeric(hotel_reserve_noOut$market_segment_type)
+hotel_reserve_noOut$booking_status <- as.numeric(hotel_reserve_noOut$booking_status)
+str(hotel_reserve_noOut)
+```
+
+#### Principal Component Analysis
+```{r}
+# Performing PCA on all the variables except our target variable avg_price_per_room
+pc_hotel_reservation <- prcomp(hotel_reserve_noOut[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17)], center = T, scale. = T)
+attributes(pc_hotel_reservation)
+summary(pc_hotel_reservation)
+```
+
+Visual Analysis of PCA results
+```{r}
+# calculate the proportion of explained variance (PEV) from the std values
+pc_hotel_reservation_var <- pc_hotel_reservation$sdev^2
+pc_hotel_reservation_var
+
+pc_hotel_reservation_PEV <- pc_hotel_reservation_var / sum(pc_hotel_reservation_var)
+pc_hotel_reservation_PEV
+
+# plot of the variance per PC
+#png(file = "hotelreserve_noOut PC PEV .png")
+plot(pc_hotel_reservation)
+#dev.off()
+```
+# Plot of the cumulative value of PEV for increasing number of additional PCs
+#   We added an 80% threshold line to inform the feature extraction
+#     according to the plot the first 10 PCs should be selected
+```{r}
+#Scree Plot
+#png(file = "hotelreserve PC Scree Plot.png")
+opar <- par(no.readonly = TRUE)
+plot(
+  cumsum(pc_hotel_reservation_PEV),
+  ylim = c(0,1),
+  xlab = 'PC',
+  ylab = 'cumulative PEV',
+  pch = 20,
+  col = 'orange'
+)
+abline(h = 0.8, col = 'red', lty = 'dashed')
+par(opar)
+#dev.off()
+```
+From here we can see that 10 PC's contribute to 80% of the information in the dataset.
+
+Getting and inspecting the loadings for each PC
+```{r}
+pc_hotel_reservation_loadings <- pc_hotel_reservation$rotation
+pc_hotel_reservation_loadings
+```
+
+Plotting first 10/17 PCs as barplots
+```{r}
+#png(file = "hotelreserve PC loadings.png")
+opar <- par(no.readonly = TRUE)
+colvector = c('burlywood4', 'cadetblue', 'chartreuse', 'chocolate', 'cornflowerblue', 'cyan','purple','gold','darkblue','darkslateblue', 'deeppink', 'red', 'deeppink4', 'bisque','black','darkorange','blue')
+
+labvector = c('PC1', 'PC2', 'PC3', 'PC4', 'PC5','PC6',"PC7","PC8","PC9","PC10")
+barplot(
+  pc_hotel_reservation_loadings[,c(1:10)],
+  beside = T,
+  yaxt = 'n',
+  names.arg = labvector,
+  col = colvector,
+  ylim = c(-1,1),
+  border = 'white',
+  ylab = 'loadings'
+)
+axis(2, seq(-1,1,0.1))
+legend(
+  'topright',
+  bty = 'n',
+  col = colvector,
+  pch = 15,
+  row.names(pc_hotel_reservation_loadings)
+)
+par(opar)
+#dev.off()
+```
+
+Generating a biplot for each pair of important PCs (and show them on the same page)
+```{r}
+# generate a biplot for each pair of important PCs (and show them on the same page)
+#   note: the option choices is used to select the PCs - default is 1:2
+#png(file = "hotelreserve PC biplot.png")
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(2,2))
+biplot(
+  pc_hotel_reservation,
+  scale = 0,
+  col = c('grey40','orange')
+)
+biplot(
+  pc_hotel_reservation,
+  choices = c(1,3),
+  scale = 0,
+  col = c('grey40','orange')
+)
+biplot(
+  pc_hotel_reservation,
+  choices = c(2,3),
+  scale = 0,
+  col = c('grey40','orange')
+)
+par(opar)
+#dev.off()
+```
+
+
+```{r}
+#Hotel_reservation_cleaned <- write.csv(hotel_reserve_noOut, "HotelReservationClean2.csv")
+```
+
+Creating a new data frame for the significant PC's and the average price per room
+```{r}
+df2<- pc_hotel_reservation$x[,c(1,2,3,4,5,6,7,8,9,10)]
+head(df2)
+
+df3 <- cbind(df2,hotel_reserve_noOut$avg_price_per_room)
+head(df3)
+colnames(df3)
+
+colnames(df3)[colnames(df3) == ""] <- "avg_price_per_room"
+colnames(df3)
+head(df3)
+```
+
+```{r}
+#This data set will be used for both machine learning and deep learning methods in python
+Hotel_reservation_PC <- write.csv(df3, "HotelReservationPC2.csv")
+```

@@ -1,4 +1,4 @@
-# Predictive-Data-Analysis-Project
+# Predictive-Data-Analysis-on-Hotel-Reservation
 ### Data Description and Research Question
 This dataset describes how online reservation channels have greatly impacted how hotels are booked and led to changes in customer behaviour. Cancelled reservations and no-shows are increasingly common, with reasons such as changes in plans or scheduling conflicts. While guests benefit from the option to cancel for free or at a low cost, this can be a challenge for hotels as it may result in a decrease in revenue.
 

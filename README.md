@@ -9,5 +9,5 @@ The data dictionary below describes the variables of the dataset.
 
 The research question is to predict the revenue per room (average price per room) made or forfeited by the hotel given other customer reservation details including if there was a cancellation or not. 
 
-**The data preparation for this project was completed in R while the machine learning and deep learning models were built in Python.
-The data preparation (analysis, evaluation and visualization) aspects were completed collaboratively in R by Ukamaka.O., and Sybil.M. **
+**The data preparation for this project was completed in R while the machine learning and deep learning models were built in Python.**
+**The data preparation (analysis, evaluation and visualization) aspects were completed collaboratively in R by Ukamaka.O., and Sybil.M.**

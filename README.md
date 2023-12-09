@@ -9,4 +9,4 @@ The data dictionary below describes the variables of the dataset.
 
 The research question is to predict the revenue per room (average price per room) made or forfeited by the hotel given other customer reservation details including if there was a cancellation or not. 
 
-The data preparation and analysis of this project was done collaboratively with Sybil M.
+The data preparation and analysis for this project was done collaboratively with Sybil Meselebe.
